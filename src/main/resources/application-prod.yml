@@ -1,0 +1,6 @@
+# prod overrides. turn off the demo token endpoint and require real config.
+mahnflow:
+  dev-token:
+    enabled: false
+  jwt:
+    secret: ${JWT_SECRET}   # must be set, no default in prod

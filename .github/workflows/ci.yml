@@ -1,0 +1,37 @@
+name: ci
+
+# runs on every push and pull request.
+# it builds, runs spotbugs, runs the testcontainers tests and makes a coverage report.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set up java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # docker is already on the github runner, so testcontainers can start
+      # postgres and redis on its own. no service block needed.
+      - name: build and test
+        run: mvn -B verify
+
+      # report only, does not fail the build (good for a learning project)
+      - name: static analysis (spotbugs)
+        run: mvn -B spotbugs:spotbugs
+
+      - name: upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-report
+          path: target/site/jacoco

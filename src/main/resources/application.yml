@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: mahnflow
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/mahnflow}
+    username: ${DB_USER:mahnflow}
+    password: ${DB_PASSWORD:mahnflow}
+  jpa:
+    hibernate:
+      ddl-auto: validate   # flyway owns the schema, hibernate only checks it
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# demo settings. the secret is only for local use, never ship this.
+mahnflow:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-please-change-this-to-a-long-random-value-32b}
+  dev-token:
+    enabled: true
+  outbox:
+    poll-ms: 3000
+  dunning:
+    cron: "0 0 2 * * *"   # every day at 02:00
+
+# expose health and prometheus metrics for the grafana dashboard
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: mahnflow
+
+server:
+  port: 8080
