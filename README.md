@@ -13,7 +13,7 @@ Backend only, no frontend, you interact with it via curl / Postman / Swagger.
 
 ## Why this project
 
-I wanted to work as a backend developer in Germany. Reading job ads, I kept running
+I wanted to work as a software developer in Germany. Reading job ads, I kept running
 into two terms I never learned at university: **Mahnwesen** (the legal-ish,
 escalating process of reminding a customer that an invoice is overdue) and
 **GoBD** (German bookkeeping and tax rules).
