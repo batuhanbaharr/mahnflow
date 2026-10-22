@@ -23,11 +23,11 @@ jobs:
       # docker is already on the github runner, so testcontainers can start
       # postgres and redis on its own. no service block needed.
       - name: build and test
-        run: mvn -B verify
+        run: ./mvnw -B verify
 
       # report only, does not fail the build (good for a learning project)
       - name: static analysis (spotbugs)
-        run: mvn -B spotbugs:spotbugs
+        run: ./mvnw -B spotbugs:spotbugs
 
       - name: upload coverage report
         uses: actions/upload-artifact@v4
