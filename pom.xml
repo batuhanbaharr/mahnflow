@@ -27,7 +27,7 @@
         <!-- spring statemachine is its own project (not part of spring boot), so i
              pin the version myself. 3.2.x is the current stable line. -->
         <spring-statemachine.version>3.2.1</spring-statemachine.version>
-        <testcontainers.version>1.20.1</testcontainers.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <dependencies>
