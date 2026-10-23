@@ -1,15 +1,15 @@
-# build the jar inside docker so you do not need maven on your machine.
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
-COPY pom.xml .
-# download deps first so this layer is cached when only code changes
-RUN mvn -q dependency:go-offline
+COPY mvnw pom.xml ./
+COPY .mvn .mvn
+RUN ./mvnw -q dependency:go-offline
 COPY src ./src
-RUN mvn -q clean package -DskipTests
+RUN ./mvnw -q clean package -DskipTests
 
-# small runtime image with just the jre and the jar
 FROM eclipse-temurin:21-jre
 WORKDIR /app
+RUN useradd --system --uid 10001 --no-create-home mahnflow
 COPY --from=build /app/target/mahnflow-*.jar app.jar
+USER 10001
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]
