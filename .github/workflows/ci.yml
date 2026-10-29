@@ -25,7 +25,7 @@ jobs:
       - name: build and test
         run: ./mvnw -B verify
 
-      # report only, does not fail the build (good for a learning project)
+      # report only, does not fail the build 
       - name: static analysis (spotbugs)
         run: ./mvnw -B spotbugs:spotbugs
 
@@ -35,3 +35,12 @@ jobs:
         with:
           name: jacoco-report
           path: target/site/jacoco
+  
+    docker:
+      runs-on: ubuntu-latest
+      needs: build
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: build image
+          run: docker build -t mahnflow:ci .
