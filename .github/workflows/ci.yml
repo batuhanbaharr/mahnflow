@@ -44,3 +44,11 @@ jobs:
 
         - name: build image
           run: docker build -t mahnflow:ci .
+
+        - name: scan image with trivy
+          uses: aquasecurity/trivy-action@0.28.0
+          with:
+            image-ref: mahnflow:ci
+            severity: CRITICAL,HIGH
+            ignore-unfixed: true
+            exit-code: "0"
