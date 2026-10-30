@@ -51,4 +51,5 @@ jobs:
           image-ref: mahnflow:ci
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "0"
+          trivyignores: .trivyignore
+          exit-code: "1"
