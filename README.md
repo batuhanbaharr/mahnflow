@@ -11,6 +11,37 @@ Backend only, no frontend, you interact with it via curl / Postman / Swagger.
 
 ---
 
+## Update, October 2026
+
+I came back to this project after finishing my thesis. The first version was
+written to learn the application side (state machine, idempotency, outbox).
+Now I want to learn the other half: what it takes to run a service like this
+for real, meaning reproducible builds, a hardened container, security scans in
+CI, running more than one instance, and later Kubernetes and a cloud setup.
+
+What changed so far:
+
+- **Reproducible build:** Maven Wrapper (`./mvnw`) pinned to Maven 3.9.16, used
+  by CI and by the Dockerfile, so everyone builds with the same Maven.
+- **Docker image:** `.dockerignore`, build through the wrapper, and the app now
+  runs as a non-root user (UID 10001) with the JVM sized from the container's
+  memory limit.
+- **Dependency security:** Trivy scans the image in CI and the build fails on
+  new HIGH or CRITICAL findings. The first scan found 51 issues, all coming from
+  an outdated Spring Boot 3.3.2. Upgrading to 3.5.16 and pinning Tomcat, Jackson,
+  Netty and the Postgres driver to patched versions brought it to zero. Two
+  `spring-webmvc` CVEs can only be fixed by Spring Framework 7 (Spring Boot 4).
+  They are accepted on purpose in [`.trivyignore`](.trivyignore) with a reason
+  and an expiry date, because this app uses neither XSLT views nor SSE.
+- **Outbox is safe with several instances:** the worker now locks the rows it
+  takes with `SELECT ... FOR UPDATE SKIP LOCKED`. I first wrote a test that
+  starts two workers at once and saw it fail (a job was sent twice), then fixed
+  it. Details in the outbox row of the concepts table below.
+- **Test setup:** Testcontainers upgraded to 1.21.4, because the old version
+  could not talk to current Docker versions.
+
+---
+
 ## Why this project
 
 I wanted to work as a software developer in Germany. Reading job ads, I kept running
@@ -44,7 +75,7 @@ draft, un-paying an invoice) is simply rejected.
 |------|------------------------|-------|
 | **Idempotency** | a retried "create" must not produce two invoices | `idempotency/IdempotencyService.java` |
 | **State machine** | model the invoice life cycle so illegal moves are impossible | `statemachine/InvoiceStateMachineConfig.java` |
-| **Outbox pattern** | send mails async without losing them or blocking the transaction | `outbox/OutboxWorker.java` |
+| **Outbox pattern** | send mails async without losing them or blocking the transaction; several workers must not send the same job twice (`SKIP LOCKED`) | `outbox/OutboxWorker.java`, `OutboxWorkerConcurrencyTest.java` |
 | **Optimistic locking** | two racing updates, one fails instead of silently overwriting | `@Version` in `InvoiceEntity.java` |
 | **Hexagonal layout** | keep the domain free of Spring imports | `domain/` package |
 | **Testcontainers** | test against real Postgres + Redis, not H2 | `AbstractIntegrationTest.java` |
@@ -127,7 +158,10 @@ problem and I wanted to learn them. The longer versions are in
 - **Outbox pattern instead of Kafka/RabbitMQ** — for a single service a message
   broker felt like overkill (one more thing to run and understand). The
   transactional outbox gives the same "never lose a message" guarantee with just
-  a database table.
+  a database table. With several app instances the workers lock the rows they
+  take (`FOR UPDATE SKIP LOCKED`), so each job goes to one worker. Delivery is
+  still *at least once*: if an instance crashes after sending a mail but before
+  its transaction commits, that mail can be sent again.
 - **Redis for idempotency keys** — I needed a fast store with a TTL so old keys
   expire on their own.
 - **JWT with a shared secret** — a proper setup would use Keycloak, but running a
@@ -138,16 +172,18 @@ problem and I wanted to learn them. The longer versions are in
 
 ## Tech stack
 
-- Java 21, Spring Boot **3.3.x**
+- Java 21, Spring Boot **3.5.x**, built with Maven Wrapper
 - Spring Web (blocking MVC — for this CRUD-ish workload WebFlux would just add
   complexity I don't need yet)
-- PostgreSQL + Flyway 10 + Spring Data JPA
+- PostgreSQL + Flyway 11 + Spring Data JPA
 - Redis (idempotency keys)
 - Spring StateMachine 3.2.x
 - Spring Security + OAuth2 Resource Server (JWT)
 - Micrometer + Prometheus + Grafana
-- Testcontainers + JUnit 5
-- GitHub Actions (build, SpotBugs report, JaCoCo coverage)
+- Testcontainers 1.21 + JUnit 5
+- Docker (multi-stage image, non-root)
+- GitHub Actions (build and tests, SpotBugs report, JaCoCo coverage, Docker image
+  build, Trivy scan that fails on HIGH/CRITICAL findings)
 
 ---
 
@@ -156,16 +192,18 @@ problem and I wanted to learn them. The longer versions are in
 You only need Docker.
 
 ```bash
-docker-compose up
+docker compose up --build
 ```
 
-This starts the app (`:8080`), Postgres, Redis, Prometheus (`:9090`) and Grafana
-(`:3000`). Flyway builds the schema on first start.
+This builds the image, then starts the app (`:8080`), Postgres, Redis, Prometheus
+(`:9090`) and Grafana (`:3000`). Flyway builds the schema on first start.
+Stop everything with `docker compose down`.
 
-Without Docker (needs Java 21 + a local Postgres + Redis):
+Without Docker (needs Java 21 + a local Postgres + Redis). The wrapper downloads
+the right Maven for you, so Maven does not need to be installed:
 
 ```bash
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 ### Try the API
@@ -217,9 +255,16 @@ things I know aren't great yet:
   millisecond can both run before the key is written. The proper fix is to
   reserve the key *first* (a "pending" marker) and let the second one wait.
   On the todo list.
-- ⚠️ **The outbox worker isn't safe for multiple app instances.** Two instances
-  could pick up the same outbox rows. The fix is `SELECT ... FOR UPDATE SKIP
-  LOCKED`; I haven't wired it into Spring Data yet. Fine for a single instance.
+- ⚠️ **The dunning job isn't safe for multiple app instances.** The `@Scheduled`
+  job in `DunningJob` runs on every instance, so with two instances both would
+  escalate the same invoices. It needs a lock so only one instance runs it
+  (ShedLock or a database lock). This is the next one I want to fix before
+  running more than one replica.
+- **Outbox delivery is at least once, not exactly once.** `SKIP LOCKED` stops two
+  workers from taking the same row, but a crash after the mail is sent and before
+  the transaction commits sends it again. A real mail provider call would need an
+  idempotency key on its side. Also, the mail is sent while the row locks are held,
+  which is fine for a log sender but would need rethinking with a slow provider.
 - **The state machine builds a fresh machine on every transition.** Works, but I
   haven't load-tested it yet (JMeter is on the list).
 - **No real emails.** `LogEmailSender` just logs. Plugging in a real provider
@@ -238,14 +283,19 @@ If you spot more, please tell me, I'm here to learn.
 ## Testing
 
 ```bash
-mvn verify
+./mvnw verify
 ```
 
 - `InvoiceDomainTest` — fast unit tests for the domain rules (no Spring).
 - `InvoiceApiIntegrationTest` — full HTTP flow against **real** Postgres + Redis
   via Testcontainers. Needs Docker running.
+- `OutboxWorkerConcurrencyTest` — starts two outbox workers at the same moment
+  and checks that no job is sent twice. It failed before the `SKIP LOCKED` fix.
 
 Coverage report ends up in `target/site/jacoco/index.html`.
+
+Use Java 21 for the build. If Maven picks a different JDK on your machine, set
+`JAVA_HOME` first (on macOS: `export JAVA_HOME=$(/usr/libexec/java_home -v 21)`).
 
 ---
 
@@ -261,4 +311,8 @@ idempotency/   redis based de-dup
 outbox/        background worker for async jobs
 dunning/       scheduled mahnwesen job
 security/      jwt resource server
+docs/adr/      architecture decision records
+.github/       CI workflow (build, tests, image build, Trivy scan)
+Dockerfile     multi-stage build, runs as non-root
+.trivyignore   accepted CVEs, each with a reason and an expiry date
 ```
