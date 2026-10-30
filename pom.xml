@@ -4,15 +4,10 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- mahnflow: small b2b invoice and dunning engine -->
-    <!-- spring boot 3.3, the latest stable line. heads up for whoever reads this:
-         3.3 ships flyway 10, which needs the separate flyway-database-postgresql
-         module (added further down), otherwise it fails at startup. found that on
-         stack overflow after a confusing error. -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.2</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -24,8 +19,6 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- spring statemachine is its own project (not part of spring boot), so i
-             pin the version myself. 3.2.x is the current stable line. -->
         <spring-statemachine.version>3.2.1</spring-statemachine.version>
         <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
@@ -55,9 +48,6 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
         </dependency>
-        <!-- flyway 10 needs this extra module for postgres, otherwise you get an
-             "Unsupported Database" error at startup. took me a github issue to
-             figure out, leaving this note so i don't forget why it's here. -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
@@ -97,8 +87,6 @@
         </dependency>
 
         <!-- api docs (swagger ui) -->
-        <!-- springdoc 2.6.x is the one that lines up with boot 3.3. version
-             mismatches here cause weird startup errors, so i keep them aligned. -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
